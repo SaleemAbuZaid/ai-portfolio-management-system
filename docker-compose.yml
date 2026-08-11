@@ -1,0 +1,89 @@
+# Project: APEX AI Portfolio Management System
+# Course: Graduation Project / Engineering Project
+# Team Members:
+# - Saleem A. S. AbuZaid
+# - Rashad Naghdiyev
+# Advisor:
+# Prof.Dr. Selim Akyokuş
+# Description:
+# - Container and deployment configuration for the APEX AI project environment.
+services:
+  # The System of Record
+  db:
+    image: timescale/timescaledb:latest-pg15
+    container_name: apex_postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-apex_db_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-apex_db}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    command: postgres -c max_connections=500
+    restart: unless-stopped
+
+  # The Event Bus (Redis Streams)
+  redis:
+    image: redis:7-alpine
+    container_name: apex_redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # The Inference & API Engine
+  apex_engine:
+    build: 
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: apex_engine_container
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-apex_db_user}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-apex_db}
+      - LOG_LEVEL=INFO
+      - LIVE_VERIFY_MODE=True
+      - TRANSFORMERS_CACHE=/root/.cache/huggingface
+      - HF_HOME=/root/.cache/huggingface
+    volumes:
+      - .:/app
+      - ./.cache/huggingface:/root/.cache/huggingface
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+    restart: unless-stopped
+
+  # The Interactive Dashboard
+  frontend:
+    build: 
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: apex_frontend
+    ports:
+      - "3001:3000"
+    depends_on:
+      - apex_engine
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:

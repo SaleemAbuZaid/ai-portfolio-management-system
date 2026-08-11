@@ -1,0 +1,14 @@
+# Project: APEX AI Portfolio Management System
+# Course: Graduation Project / Engineering Project
+# Team Members:
+# - Saleem A. S. AbuZaid
+# - Rashad Naghdiyev
+# Advisor:
+# Prof.Dr. Selim Akyokuş
+# Description:
+# - Container and deployment configuration for the APEX AI project environment.
+node_modules
+build
+dist
+.env
+.DS_Store
